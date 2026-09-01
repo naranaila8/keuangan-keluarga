@@ -12,7 +12,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 Login Aplikasi Keuangan")
+    st.title("🔒 Rumi - Isa ")
     st.caption("Silakan masukkan password untuk mengakses data keluarga.")
     pwd = st.text_input("Password", type="password")
     if st.button("Masuk"):
@@ -24,7 +24,7 @@ if not st.session_state.authenticated:
             st.error("Password Salah!")
     st.stop() # Menghentikan kode di sini jika belum login
 
-st.title("💰 Aplikasi Keuangan Keluarga (Advance)")
+st.title("💰 Rumi - Isa Future")
 
 # --- KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
