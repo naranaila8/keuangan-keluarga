@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- PENGATURAN HALAMAN ---
 st.set_page_config(page_title="Keuangan Keluarga", layout="wide")
-st.title("💰 Rumi-Isa Future" )
+st.title("💰 Aplikasi Keuangan Keluarga")
 
 # --- KONEKSI KE GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
