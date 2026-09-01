@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- PENGATURAN HALAMAN ---
 st.set_page_config(page_title="Keuangan Keluarga", layout="wide")
-st.title("💰 Aplikasi Keuangan Keluarga")
+st.title("💰 Rumi-Isa Keuangan")
 
 # --- KONEKSI KE GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -96,7 +96,6 @@ with st.sidebar.form("form_transaksi"):
 # --- KALKULASI DATA ---
 df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors='coerce').fillna(0)
 
-# Kalkulasi Total
 total_pemasukan = df[df["Jenis"].isin(["Pemasukan"])]["Jumlah"].sum()
 total_kebutuhan = df[df["Kategori"] == "50% Kebutuhan (Wajib)"]["Jumlah"].sum()
 total_keinginan = df[df["Kategori"] == "30% Keinginan (Hiburan/Tersier)"]["Jumlah"].sum()
@@ -105,7 +104,7 @@ total_kredit = df[df["Jenis"] == "Kredit"]["Jumlah"].sum()
 
 rasio_tabungan = (total_tabungan / total_pemasukan * 100) if total_pemasukan > 0 else 0
 
-# Kalkulasi Saldo Per Akun
+# KALKULASI SALDO PER AKUN (BUG TELAH DIPERBAIKI DI SINI)
 saldo_akun = {}
 for _, row in df.iterrows():
     j = row["Jenis"]
@@ -113,8 +112,9 @@ for _, row in df.iterrows():
     a = str(row["Akun"])
     at = str(row["Akun Tujuan"])
     
-    if a not in saldo_akun and a not in ["", "-", "nan"]: saldo_akun[a] = 0
-    if at not in saldo_akun and at not in ["", "-", "nan"]: saldo_akun[at] = 0
+    # Berikan nilai awal 0 untuk SEMUA jenis karakter agar sistem tidak bingung/error
+    if a not in saldo_akun: saldo_akun[a] = 0
+    if at not in saldo_akun: saldo_akun[at] = 0
     
     if j in ["Pemasukan", "Saldo Awal"]:
         saldo_akun[a] += jml
@@ -126,6 +126,7 @@ for _, row in df.iterrows():
 
 # --- TAMPILAN DASHBOARD ---
 st.subheader("💳 Saldo Dompet & Rekening Aktif")
+# Hilangkan akun kosong/strip saat ditampilkan di layar
 saldo_aktif = {k: v for k, v in saldo_akun.items() if k not in ["", "-", "nan"]}
 if saldo_aktif:
     cols = st.columns(len(saldo_aktif) if len(saldo_aktif) < 5 else 5)
@@ -180,7 +181,7 @@ st.dataframe(df_display, use_container_width=True)
 
 csv_data = df_display.to_csv(index=False).encode('utf-8')
 st.download_button(
-    label="📥 Download Data yang Difilter (CSV/Excel)",
+    label="📥 Download Data yang Difilter (CSV)",
     data=csv_data,
     file_name=f'Data_Keuangan_{filter_bulan}.csv',
     mime='text/csv'
