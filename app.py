@@ -3,11 +3,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
-import numpy as np
 
 # --- PENGATURAN HALAMAN ---
 st.set_page_config(page_title="Keuangan Keluarga Advance", layout="wide")
-st.title("💰 Aplikasi Keuangan Keluarga (Advance)")
+st.title("💰 Rumi-Isa Future")
 
 # --- KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -38,21 +37,29 @@ def load_data():
 df = load_data()
 bulan_ini = datetime.today().strftime('%Y-%m')
 
-# --- SIDEBAR: PROFIL KELUARGA (ADVANCE) ---
+# --- SIDEBAR: PROFIL KELUARGA & TARGET ---
 st.sidebar.header("⚙️ Profil Keluarga & Target")
-with st.sidebar.expander("Atur Umur & Inflasi (Untuk Rumus Pakar)"):
+with st.sidebar.expander("Atur Umur & Asumsi Masa Depan"):
     umur_suami = st.number_input("Umur Suami", 20, 80, 30)
     umur_istri = st.number_input("Umur Istri", 20, 80, 28)
     jumlah_anak = st.number_input("Jumlah Anak", 0, 10, 1)
-    umur_anak_terlama = st.number_input("Umur Anak Pertama", 0, 30, 3) if jumlah_anak > 0 else 0
-    inflasi = st.slider("Asumsi Inflasi Tahunan (%)", 1, 15, 6)
-    biaya_kuliah_saat_ini = st.number_input("Est. Biaya Kuliah Total (Saat ini)", value=150000000, step=10000000)
+    
+    # Input Dinamis: Menyesuaikan dengan jumlah anak
+    umur_anak_list = []
+    for i in range(jumlah_anak):
+        umur_a = st.number_input(f"Umur Anak ke-{i+1}", 0, 30, 0, key=f"anak_{i}")
+        umur_anak_list.append(umur_a)
+        
+    st.markdown("---")
+    inflasi = st.slider("Asumsi Inflasi Pendidikan (%)", 1, 15, 6, 
+                        help="Inflasi umum di Indonesia mungkin 2-4%, tetapi Inflasi Pendidikan secara historis berada di angka 6-10% per tahun. Angka 6% adalah batas moderat yang sangat disarankan.")
+    biaya_kuliah_saat_ini = st.number_input("Est. Biaya Kuliah (Saat ini)", value=150000000, step=10000000,
+                        help="Asumsi Rp 150 Juta = Biaya Uang Kuliah Tunggal (UKT) 8 semester + biaya hidup standar selama 4 tahun kuliah S1.")
 
 # --- SIDEBAR: INPUT TRANSAKSI ---
 st.sidebar.markdown("---")
 st.sidebar.header("📝 Input Transaksi Baru")
 
-# Ambil daftar akun
 akun_history = []
 if not df.empty:
     akun_history = list(set(df["Akun"].dropna().unique().tolist() + df["Akun Tujuan"].dropna().unique().tolist()))
@@ -111,7 +118,6 @@ if df.empty:
     st.warning("Data masih kosong. Silakan input transaksi pertama Anda.")
     st.stop()
 
-# Filter Bulan Ini
 df_bulan_ini = df[df['Bulan_Tahun'] == bulan_ini]
 pemasukan_bulan_ini = df_bulan_ini[df_bulan_ini["Jenis"] == "Pemasukan"]["Jumlah"].sum()
 min_tabungan_bln_ini = pemasukan_bulan_ini * 0.2
@@ -119,12 +125,10 @@ max_pengeluaran_bln_ini = pemasukan_bulan_ini * 0.8
 terpakai_bln_ini = df_bulan_ini[df_bulan_ini["Jenis"].isin(["Pengeluaran", "Kredit"])]["Jumlah"].sum()
 nabung_bln_ini = df_bulan_ini[df_bulan_ini["Jenis"] == "Tabungan"]["Jumlah"].sum()
 
-# Kalkulasi Total
 total_pemasukan = df[df["Jenis"] == "Pemasukan"]["Jumlah"].sum()
 total_kebutuhan = df[df["Kategori"] == "50% Kebutuhan (Wajib)"]["Jumlah"].sum()
 total_tabungan = df[df["Jenis"] == "Tabungan"]["Jumlah"].sum()
 
-# Kalkulasi Saldo Per Akun
 saldo_akun = {}
 for _, row in df.iterrows():
     j, jml, a, at = row["Jenis"], row["Jumlah"], row["Akun"], row["Akun Tujuan"]
@@ -137,14 +141,11 @@ for _, row in df.iterrows():
         saldo_akun[a] -= jml
         saldo_akun[at] += jml
 
-# Memisahkan Dana Aktif vs Tabungan
 kata_kunci_tabungan = ['emas', 'reksadana', 'deposito', 'saham', 'investasi', 'saving', 'berjangka']
-akun_aktif = {}
-akun_tabungan = {}
+akun_aktif, akun_tabungan = {}, {}
 
 for ak, sld in saldo_akun.items():
     if ak in ["", "-", "nan"] or sld == 0: continue
-    # Jika nama akun mengandung kata kunci tabungan, masuk ke aset
     if any(k in ak.lower() for k in kata_kunci_tabungan):
         akun_tabungan[ak] = sld
     else:
@@ -155,15 +156,13 @@ col_akt, col_ast = st.columns(2)
 with col_akt:
     st.subheader("💳 Dana Aktif (Dompet & Bank)")
     if akun_aktif:
-        for ak, sld in akun_aktif.items():
-            st.metric(ak, f"Rp {sld:,.0f}")
+        for ak, sld in akun_aktif.items(): st.metric(ak, f"Rp {sld:,.0f}")
     else: st.caption("Belum ada dana aktif.")
 
 with col_ast:
     st.subheader("💎 Aset Tabungan & Investasi")
     if akun_tabungan:
-        for ak, sld in akun_tabungan.items():
-            st.metric(ak, f"Rp {sld:,.0f}")
+        for ak, sld in akun_tabungan.items(): st.metric(ak, f"Rp {sld:,.0f}")
     else: st.caption("Belum ada aset tabungan.")
 
 st.markdown("---")
@@ -172,7 +171,6 @@ st.markdown("---")
 st.subheader("📊 Kesehatan Finansial & Target Bulan Ini")
 col_s1, col_s2, col_s3 = st.columns([1.5, 1, 1])
 
-# Menghitung Batas Rawan (Asumsi 6x Rata-rata Pengeluaran Wajib Bulanan)
 bulan_aktif = len(df['Bulan_Tahun'].unique()) if len(df['Bulan_Tahun'].unique()) > 0 else 1
 rata_wajib_bulanan = total_kebutuhan / bulan_aktif
 batas_rawan = rata_wajib_bulanan * 6 if rata_wajib_bulanan > 0 else (pemasukan_bulan_ini * 0.5 * 6)
@@ -189,9 +187,8 @@ with col_s1:
     fig.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10))
     st.plotly_chart(fig, use_container_width=True)
     
-    # Caption Status Keuangan
     if selisih_rawan >= 0:
-        st.success(f"🌟 **Keuangan Sehat!** Total tabungan Anda Surplus **+ Rp {selisih_rawan:,.0f}** di atas Batas Rawan Dana Darurat.")
+        st.success(f"🌟 **Keuangan Sehat!** Surplus **+ Rp {selisih_rawan:,.0f}** dari Batas Rawan Dana Darurat (Aman 6 Bulan).")
     else:
         st.error(f"⚠️ **Keuangan Rawan!** Anda kekurangan **- Rp {abs(selisih_rawan):,.0f}** untuk mencapai Batas Aman Dana Darurat.")
 
@@ -207,14 +204,13 @@ with col_s3:
 
 st.markdown("---")
 
-# --- ANALISIS MASA DEPAN (RUMUS PAKAR) ---
-st.subheader("🔮 Analisis Masa Depan (Robo-Advisor)")
-col_adv1, col_adv2 = st.columns(2)
+# --- ANALISIS MASA DEPAN & BENCHMARK NASIONAL ---
+st.subheader("🔮 Analisis Masa Depan & Benchmark")
+col_adv1, col_adv2, col_adv3 = st.columns(3)
 
 with col_adv1:
-    st.markdown("**🛡️ Analisis Pensiun (Fidelity Rule)**")
-    st.caption("*Pakar menyarankan: Umur 30 punya tabungan 1x Gaji Tahunan, Umur 40 (3x Gaji).*")
-    # Perkiraan Gaji Tahunan
+    st.markdown("**🛡️ Analisis Pensiun (Fidelity)**")
+    st.caption("*Target: Umur 30 punya 1x Gaji Tahunan, Umur 40 (3x Gaji).*")
     gaji_tahunan = (total_pemasukan / bulan_aktif) * 12
     umur_tertinggi = max(umur_suami, umur_istri)
     
@@ -227,24 +223,40 @@ with col_adv1:
     st.progress(min(total_tabungan / target_pensiun, 1.0) if target_pensiun > 0 else 0)
 
 with col_adv2:
-    st.markdown("**🎓 Proyeksi Biaya Pendidikan Anak**")
+    st.markdown("**🎓 Proyeksi Pendidikan Anak**")
+    st.caption("*Menggunakan rumus Future Value (FV) & inflasi pendidikan.*")
     if jumlah_anak > 0:
-        tahun_menuju_kuliah = 18 - umur_anak_terlama
-        if tahun_menuju_kuliah > 0:
-            # Rumus Future Value (FV = PV * (1 + r)^n)
-            fv_kuliah = biaya_kuliah_saat_ini * ((1 + (inflasi/100)) ** tahun_menuju_kuliah)
-            st.caption(f"*Dengan inflasi {inflasi}%/thn, biaya kuliah {tahun_menuju_kuliah} tahun lagi akan menjadi:*")
-            st.metric(f"Proyeksi Biaya Kuliah", f"Rp {fv_kuliah:,.0f}")
-            nabung_pendidikan_per_bulan = fv_kuliah / (tahun_menuju_kuliah * 12)
-            st.info(f"💡 Anda harus menyisihkan **Rp {nabung_pendidikan_per_bulan:,.0f} / bulan** khusus untuk ini.")
-        else:
-            st.success("Anak Anda sudah/akan segera memasuki usia kuliah.")
+        total_nabung_pendidikan = 0
+        for i, umur_a in enumerate(umur_anak_list):
+            tahun_menuju_kuliah = 18 - umur_a
+            if tahun_menuju_kuliah > 0:
+                fv_kuliah = biaya_kuliah_saat_ini * ((1 + (inflasi/100)) ** tahun_menuju_kuliah)
+                st.markdown(f"Anak ke-{i+1} *(Sisa {tahun_menuju_kuliah} thn)*: **Rp {fv_kuliah:,.0f}**")
+                total_nabung_pendidikan += fv_kuliah / (tahun_menuju_kuliah * 12)
+            else:
+                st.markdown(f"Anak ke-{i+1}: *Sudah masa kuliah*")
+                
+        if total_nabung_pendidikan > 0:
+            st.info(f"Sisihkan **Rp {total_nabung_pendidikan:,.0f} / bln** mulai saat ini khusus untuk dana kuliah keseluruhan anak.")
     else:
-        st.caption("Anda belum memasukkan data anak pada profil keluarga di sidebar.")
+        st.caption("Belum ada data anak.")
 
-# --- FILTER DATA BERDASARKAN ANGGOTA KELUARGA ---
+with col_adv3:
+    st.markdown("**🏙️ Reality Check (Biaya Hidup)**")
+    st.caption("*Berdasarkan data BPS DKI Jakarta sebagai tolok ukur kota tertinggi.*")
+    # Asumsi BPS untuk Jakarta (Rp 14.88 Juta untuk keluarga 4 orang per bulan)
+    benchmark_jakarta = 14880000 
+    rasio_benchmark = rata_wajib_bulanan / benchmark_jakarta * 100
+    st.metric("Pengeluaran Pokok Anda", f"Rp {rata_wajib_bulanan:,.0f} / bln")
+    
+    if rata_wajib_bulanan < benchmark_jakarta:
+        st.success(f"Setara **{rasio_benchmark:.1f}%** dari biaya hidup keluarga di Jakarta. Cukup hemat dan kompetitif!")
+    else:
+        st.warning(f"Melebihi standar biaya hidup ibu kota (DKI Jakarta). Pastikan tidak ada pengeluaran tersier yang masuk kebutuhan wajib.")
+
+# --- FILTER, EDIT, & DOWNLOAD ---
 st.markdown("---")
-st.subheader("🕵️ Filter & Edit Data Keluarga")
+st.subheader("🕵️ Filter, Edit, & Download Riwayat Transaksi")
 
 col_f1, col_f2 = st.columns(2)
 filter_penginput = col_f1.selectbox("Filter berdasarkan Penginput", ["Semua", "Suami", "Istri", "Bersama"])
@@ -254,13 +266,20 @@ df_filtered = df.copy()
 if filter_penginput != "Semua": df_filtered = df_filtered[df_filtered['Penginput'] == filter_penginput]
 if filter_bulan != "Semua": df_filtered = df_filtered[df_filtered['Bulan_Tahun'] == filter_bulan]
 
-# Tabel Interaktif yang sudah disaring
-edited_df = st.data_editor(df_filtered.drop(columns=['Bulan_Tahun']), num_rows="dynamic", use_container_width=True, key="data_editor")
+edited_df = st.data_editor(df_filtered.drop(columns=['Bulan_Tahun'], errors='ignore'), num_rows="dynamic", use_container_width=True, key="data_editor")
 
 if st.button("💾 Simpan Perubahan Tabel", type="primary"):
-    # Gabungkan data lama dengan data yang diedit
     df_others = df[~df.index.isin(df_filtered.index)]
     df_final = pd.concat([df_others, edited_df]).sort_index()
     conn.update(worksheet="Sheet1", data=df_final)
     st.success("Tabel berhasil diupdate!")
     st.rerun()
+
+# Tombol Download (kembali ditambahkan)
+csv_data = df_filtered.drop(columns=['Bulan_Tahun'], errors='ignore').to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="📥 Download Data yang Difilter (CSV)",
+    data=csv_data,
+    file_name=f"Data_Keuangan_{filter_bulan.replace(' ', '_')}_{filter_penginput}.csv",
+    mime='text/csv'
+)
