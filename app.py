@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
-import json
 from datetime import datetime
 
 # --- PENGATURAN HALAMAN ---
@@ -10,19 +9,18 @@ st.set_page_config(page_title="Keuangan Keluarga", layout="wide")
 st.title("💰 Aplikasi Keuangan Keluarga")
 
 # --- KONEKSI KE GOOGLE SHEETS ---
-url_sheet = st.secrets["url_google_sheet"]
-credentials = json.loads(st.secrets["gcp_service_account"])
-conn = st.connection("gsheets", type=GSheetsConnection, service_account=credentials)
+# Pastikan nama koneksi di secrets.toml sesuai ("gsheets")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- FUNGSI LOAD DATA ---
 def load_data():
     try:
-        # Membaca data dari Google Sheets
-        df = conn.read(spreadsheet=url_sheet, worksheet="Sheet1")
+        # Membaca data dari Google Sheets (Pastikan nama tab/sheet di bawah adalah 'Sheet1')
+        df = conn.read(worksheet="Sheet1", ttl=0)
         df = df.dropna(how="all") # Bersihkan baris kosong
         return df
     except Exception as e:
-        st.error(f"Gagal membaca data: {e}")
+        st.error(f"Gagal membaca data dari Google Sheets. Pastikan link dan izin akun layanan sudah benar. Error: {e}")
         return pd.DataFrame(columns=["Tanggal", "Jenis", "Kategori", "Item", "Jumlah", "Keterangan"])
 
 df = load_data()
@@ -58,7 +56,6 @@ with st.sidebar.form("form_transaksi"):
         if item_final == "":
             st.sidebar.error("Item tidak boleh kosong!")
         else:
-            # Siapkan data baru
             data_baru = pd.DataFrame({
                 "Tanggal": [tanggal.strftime("%Y-%m-%d")], 
                 "Jenis": [jenis], 
@@ -68,24 +65,22 @@ with st.sidebar.form("form_transaksi"):
                 "Keterangan": [keterangan]
             })
             
-            # Gabungkan dengan data lama
             df_updated = pd.concat([df, data_baru], ignore_index=True)
-            
-            # Update ke Google Sheets
             conn.update(worksheet="Sheet1", data=df_updated)
             
             st.sidebar.success(f"Berhasil disimpan ke Google Sheets!")
             st.rerun()
 
 # --- KALKULASI DASHBOARD ---
-# Pastikan kolom jumlah berupa angka
-df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors='coerce').fillna(0)
-
-total_pemasukan = df[df["Jenis"] == "Pemasukan"]["Jumlah"].sum()
-total_kebutuhan = df[df["Kategori"] == "50% Kebutuhan (Wajib)"]["Jumlah"].sum()
-total_keinginan = df[df["Kategori"] == "30% Keinginan (Hiburan/Tersier)"]["Jumlah"].sum()
-total_tabungan = df[df["Jenis"] == "Tabungan"]["Jumlah"].sum()
-total_kredit = df[df["Jenis"] == "Kredit"]["Jumlah"].sum()
+if not df.empty and "Jumlah" in df.columns:
+    df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors='coerce').fillna(0)
+    total_pemasukan = df[df["Jenis"] == "Pemasukan"]["Jumlah"].sum()
+    total_kebutuhan = df[df["Kategori"] == "50% Kebutuhan (Wajib)"]["Jumlah"].sum()
+    total_keinginan = df[df["Kategori"] == "30% Keinginan (Hiburan/Tersier)"]["Jumlah"].sum()
+    total_tabungan = df[df["Jenis"] == "Tabungan"]["Jumlah"].sum()
+    total_kredit = df[df["Jenis"] == "Kredit"]["Jumlah"].sum()
+else:
+    total_pemasukan = total_kebutuhan = total_keinginan = total_tabungan = total_kredit = 0
 
 rasio_tabungan = (total_tabungan / total_pemasukan * 100) if total_pemasukan > 0 else 0
 
